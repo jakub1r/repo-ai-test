@@ -1,112 +1,106 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+import { Button, StyleSheet, Text, View } from "react-native";
+import { useTensorflowModel } from "react-native-fast-tflite";
+import { useSharedValue } from "react-native-reanimated";
+import {
+  Camera,
+  useCameraDevice,
+  useCameraPermission,
+  useFrameProcessor,
+} from "react-native-vision-camera";
+import { useResizePlugin } from "vision-camera-resize-plugin";
 
 export default function TabTwoScreen() {
+  const objectDetection = useTensorflowModel(
+    require("../../assets/models/best_float32.tflite")
+  );
+  const model =
+    objectDetection.state === "loaded" ? objectDetection.model : undefined;
+  console.log(model?.outputs);
+  const { resize } = useResizePlugin();
+  const device = useCameraDevice("back");
+  const { hasPermission, requestPermission } = useCameraPermission();
+  let frameCount = useSharedValue(true);
+  let resizedShared = useSharedValue<null | Float32Array<ArrayBufferLike>>(
+    null
+  );
+
+  const frameProcessor = useFrameProcessor(
+    (frame) => {
+      "worklet";
+
+      if (model == null) return;
+      // wykonaj tylko co 500 klatek
+      if (frameCount.value) {
+        return;
+      }
+
+      // reset licznika
+      frameCount.value = false;
+
+      const resized = resize(frame, {
+        scale: { width: 640, height: 640 },
+        pixelFormat: "rgb",
+        dataType: "float32",
+      });
+      const outputTensor = model.runSync([resized]);
+      const [bb, scores] = outputTensor;
+      //console.log(bb);
+      const flatObj = outputTensor[0];
+
+      // zamieniamy obiekt na tablicę wartości po indeksach
+      const totalValues = Object.keys(flatObj).length; // powinno być ok. 1800
+      const valuesPerDet = 6;
+      const numDetections = totalValues / valuesPerDet;
+
+      const detections = [];
+
+      for (let i = 0; i < numDetections; i++) {
+        const base = i * valuesPerDet;
+
+        const cx = flatObj[base + 0];
+        const cy = flatObj[base + 1];
+        const bw = flatObj[base + 2];
+        const bh = flatObj[base + 3];
+        const conf = flatObj[base + 4];
+        const cls = flatObj[base + 5];
+
+        if (conf > 0.5) {
+          detections.push({
+            cx,
+            cy,
+            bw,
+            bh,
+            conf,
+            cls_id: Math.round(cls),
+          });
+        }
+      }
+
+      console.log("DETECTIONS:", detections);
+    },
+    [model]
+  );
+
+  if (device == null)
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <Text>asd</Text>
+      </View>
+    );
+  if (!hasPermission)
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <Button title="XD" onPress={requestPermission}></Button>
+      </View>
+    );
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
-      headerImage={
-        <IconSymbol
-          size={310}
-          color="#808080"
-          name="chevron.left.forwardslash.chevron.right"
-          style={styles.headerImage}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
-    </ParallaxScrollView>
+    <Camera
+      frameProcessor={frameProcessor}
+      style={StyleSheet.absoluteFill}
+      device={device}
+      isActive={true}
+    />
   );
 }
 
-const styles = StyleSheet.create({
-  headerImage: {
-    color: '#808080',
-    bottom: -90,
-    left: -35,
-    position: 'absolute',
-  },
-  titleContainer: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-});
+const styles = StyleSheet.create({});
