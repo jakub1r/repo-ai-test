@@ -7,12 +7,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { processImage } from "react-native-awesome-module";
 import {
   Camera,
   useCameraDevice,
   useCameraPermission,
 } from "react-native-vision-camera";
-
 export default function TabTwoScreen() {
   const device = useCameraDevice("back");
   const cameraRef = useRef<Camera>(null);
@@ -29,11 +29,12 @@ export default function TabTwoScreen() {
     setPredictions((pred) => []);
     const photo = await cameraRef.current?.takePhoto();
     console.log(photo?.path);
-    await SimpleMath.processImage(photo?.path).then((result: []) => {
-      result.forEach((element) => {
-        setPredictions((pred) => [...pred, element[5]]);
+    if (photo?.path) {
+      const result = await processImage(photo?.path);
+      result.forEach((det: any) => {
+        setPredictions((pred) => [...pred, det[5]]); // confidence
       });
-    });
+    }
   };
 
   if (device == null)
