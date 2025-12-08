@@ -68,7 +68,9 @@ export default function TabTwoScreen() {
         }}
       >
         {predictions.map((element, index) => (
-          <Text style={{ fontSize: 25, paddingTop: 50 }}>{element}</Text>
+          <Text key={index} style={{ fontSize: 25, paddingTop: 50 }}>
+            {element}
+          </Text>
         ))}
       </View>
       <TouchableOpacity
